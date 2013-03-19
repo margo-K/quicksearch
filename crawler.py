@@ -11,7 +11,7 @@ import re
 
 crawled_or_queued = set()
 to_crawl = Queue()
-to_be_indexed = Queue(maxsize=10)
+to_be_indexed = Queue(maxsize=100)
 
 search_index = {}
 
@@ -22,14 +22,14 @@ def normalize(url):
 
 def crawl():
     while True:
+        print "Queue size before {}".format(to_be_indexed.qsize())
         url = to_crawl.get()
-        print "\033[94m Crawling {} \033[0m".format(url)
         to_be_indexed.put((url,get_page_text(url)))
-
+        print "\033[94m Finished crawling {0} \033[0m \n Queue Size {1}".format(url,to_be_indexed.qsize())
 def get_page_text(url):
     try:
         r = requests.get(url,allow_redirects=False)
-    except requests.exceptions.ConnectionError:
+    except (requests.exceptions.ConnectionError, requests.exceptions.InvalidSchema):
         return
     if r.status_code != 200:
         return
@@ -38,7 +38,6 @@ def get_page_text(url):
 def index(url,text):
     try:
         s = BeautifulSoup(text)
-        print "Indexing {0}\n Queue Size {1}".format(url,to_be_indexed.qsize())
     except HTMLParser.HTMLParseError:
         return
     for link in s.findAll('a'):
@@ -52,6 +51,8 @@ def index(url,text):
     
     for word in set(words):
         search_index.setdefault(word, []).append(url)
+    print "Indexing Completed: {0}\n Queue Size {1}".format(url,to_be_indexed.qsize())
+
     
 def get_words_from_tag(tag):
      return [''.join(re.findall(r'[a-zA-Z]', x)).lower() for x in tag.getText().split()]
@@ -63,19 +64,21 @@ if __name__ == '__main__':
     try:
         crawled_or_queued.add(u'http://www.nytimes.com/')
         to_crawl.put(u'http://www.nytimes.com/')
-        for i in range(20):
+        for i in range(100):
             t = threading.Thread(target=crawl)
             t.daemon = True
             t.start()
 
         while True:
+            print "Preparing to Index \n Queue Size {}".format(to_be_indexed.qsize())
             url, text = to_be_indexed.get()
             if text:
                 index(url,text)
+            print "Finished Index Attempt"
     except KeyboardInterrupt:
-
-        pprint(search_index)
-        print search_index.keys()
+        pass
+        # pprint(search_index)
+        # print search_index.keys()
 
     while True:
         word = raw_input('enter search term!')
